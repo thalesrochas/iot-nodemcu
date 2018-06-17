@@ -18,7 +18,7 @@
 #define D10 1
 
 DHT dht(D2, DHTTYPE);
-BlynkTimer timerDHT, timerThingSpeak;
+BlynkTimer timerDHT, timerSolo, timerThingSpeak, timerNotify;
 
 const char blynk_auth[] = "***";
 
@@ -31,6 +31,7 @@ const char pass[] = "***";
 
 float temperatura;
 float umidade;
+float umidadeSolo;
 
 void setup() {
     Serial.begin(38400);
@@ -41,21 +42,21 @@ void setup() {
     
     while (!Blynk.connect()) {}
     
-    timerDHT.setInterval(2000L, sendDHT);
+    timerDHT.setInterval(2000L, readDHT);
+    timerSolo.setInterval(1000L, readSolo);
     timerThingSpeak.setInterval(20000L, sendToThingSpeak);
+    timerNotify.setInterval(30000L, notificate);
 }
 
 void loop() {
     Blynk.run();
     timerDHT.run();
+    timerSolo.run();
     timerThingSpeak.run();
-
-    if (umidade >= 80) {
-        Blynk.notify("Alta Umidade! " + String(umidade) + "%");
-    }
+    timerNotify.run();
 }
 
-void sendDHT() {
+void readDHT() {
     temperatura = dht.readTemperature();
     umidade = dht.readHumidity();
     
@@ -66,27 +67,32 @@ void sendDHT() {
     else {
         if (!isnan(temperatura)) {
             Blynk.virtualWrite(V0, temperatura);
-        }
-        else {
-            Blynk.virtualWrite(V0, "Erro de Leitura");
+            Serial.print("Temperatura:\t");
+            Serial.print(temperatura);
+            Serial.println("ºC");
         }
         if (!isnan(umidade)) {
             Blynk.virtualWrite(V1, umidade);
-        }
-        else {
-            Blynk.virtualWrite(V1, "Erro de Leitura");
+            Serial.print("Umidade:\t");
+            Serial.print(umidade);
+            Serial.println("%");
         }
     }
 }
 
+void readSolo() {
+    umidadeSolo = map(analogRead(A0), 216, 1023, 100, 0);
+    Blynk.virtualWrite(V2, umidadeSolo);
+    Serial.print("Umidade Solo:\t");
+    Serial.print(umidadeSolo);
+    Serial.println("%");
+}
+
 void sendToThingSpeak() {
-    if (!digitalRead(D1)) {
-        Serial.println("O sensor DHT11 está desativado.\nEnvio para o ThingSpeak cancelado.");
-    }
-    else {
-        if (thingSpeak.connect(server, 80)) {
-            Serial.println("Enviando informações para ThingSpeak...");
-            String postStr = keyThingSpeak;
+    if (thingSpeak.connect(server, 80)) {
+        Serial.println("Enviando informações para ThingSpeak...");
+        String postStr = keyThingSpeak;
+        if (digitalRead(D1)) {
             if (!isnan(temperatura)) {
                 postStr += "&field1=";
                 postStr += String(temperatura);
@@ -95,22 +101,37 @@ void sendToThingSpeak() {
                 postStr += "&field2=";
                 postStr += String(umidade);
             }
-            postStr += "\r\n\r\n";
-    
-            thingSpeak.print("POST /update HTTP/1.1\n");
-            thingSpeak.print("Host: api.thingspeak.com\n");
-            thingSpeak.print("Connection: close\n");
-            thingSpeak.print("X-THINGSPEAKAPIKEY: " + keyThingSpeak + "\n");
-            thingSpeak.print("Content-Type: application/x-www-form-urlencoded\n");
-            thingSpeak.print("Content-Length: ");
-            thingSpeak.print(postStr.length());
-            thingSpeak.print("\n\n");
-            thingSpeak.print(postStr);
-            Serial.println("Informações enviadas!");
         }
         else {
-            Serial.println("Falha ao conectar com " + String(server));
+            Serial.println("O sensor DHT11 está desativado.\nEnvio para o ThingSpeak cancelado.");
         }
-        thingSpeak.stop();
+        postStr += "&field3=";
+        postStr += String(umidadeSolo);
+        postStr += "\r\n\r\n";
+
+        thingSpeak.print("POST /update HTTP/1.1\n");
+        thingSpeak.print("Host: api.thingspeak.com\n");
+        thingSpeak.print("Connection: close\n");
+        thingSpeak.print("X-THINGSPEAKAPIKEY: " + keyThingSpeak + "\n");
+        thingSpeak.print("Content-Type: application/x-www-form-urlencoded\n");
+        thingSpeak.print("Content-Length: ");
+        thingSpeak.print(postStr.length());
+        thingSpeak.print("\n\n");
+        thingSpeak.print(postStr);
+        Serial.println("Informações enviadas!");
+    }
+    else {
+        Serial.println("Falha ao conectar com " + String(server));
+    }
+    thingSpeak.stop();
+}
+
+void notificate() {
+    if (umidade >= 80) {
+        Blynk.notify("Alta Umidade! " + String(umidade) + "%");
+    }
+    
+    if (umidadeSolo <= 20) {
+        Blynk.notify("Baixa umidade no solo " + String(umidadeSolo) + "%\nRegue sua planta!");
     }
 }
