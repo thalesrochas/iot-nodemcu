@@ -1,8 +1,10 @@
+// Configurações do Blynk
 #define BLYNK_PRINT Serial
 
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 
+// Define os pinos do NodeMCU para facilitar o uso das portas
 #define D0 16
 #define D1 5
 #define D2 4
@@ -15,24 +17,30 @@
 #define D9 3
 #define D10 1
 
+// Timers para disparar ações em um determinado tempo
 BlynkTimer timerNivel, timerNotify;
 
+// Chave de autenticação
 const char blynk_auth[] = "***";
 
 const char ssid[] = "***";
 const char pass[] = "***";
 
+// Variável do sensor
 float nivel;
 
 void setup() {
     Serial.begin(38400);
     
+    // Inicia a conexão via Wi-Fi
     Blynk.begin(blynk_auth, ssid, pass);
-    
+
+    // Espera o Blynk conectar antes de iniciar
     while (!Blynk.connect()) {}
     
-    timerNivel.setInterval(1000L, readNivel);
-    timerNotify.setInterval(30000L, notificate);
+    // Configura o intervalo de tempo e a ação a ser disparada por cada timer
+    timerNivel.setInterval(1000L, readNivel); // Dispara a cada 1 segundo
+    timerNotify.setInterval(30000L, notificate); // Dispara a cada 30 segundos
 }
 
 void loop() {
@@ -41,6 +49,7 @@ void loop() {
     timerNotify.run();
 }
 
+// Leitura e envio de dados do sensor de Nível
 void readNivel() {
     nivel = analogRead(A0);
     
@@ -82,7 +91,9 @@ void readNivel() {
     }
 }
 
+// Envio de Notificações ao aplicativo do Blynk no smartphone
 void notificate() {
+    // Notifica quando não há água ou quando o nível está muito baixo
     if (nivel<=480){ 
         Blynk.notify("Caixa D'água vazia. :(");
     }
